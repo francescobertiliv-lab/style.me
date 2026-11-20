@@ -62,11 +62,11 @@ def build(conn, d: date, refresh: bool = False) -> dict:
             for it in o["items"]:
                 conn.execute("INSERT INTO outfit_items VALUES (?,?)", (oid, it["id"]))
         existing = outfits_for(conn, d)
-    else:
+    if not missing:
         for o in existing:
-            if o.get("missing"):
+            if o.get("missing") and json.loads(o["missing"]):
                 missing = json.loads(o["missing"])
-                break
+    existing = [o for o in existing if o["items"]]
     cal = calendar_status(conn, d)
     return {
         **info,

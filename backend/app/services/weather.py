@@ -61,7 +61,7 @@ def forecast(conn, lat: float, lon: float, day: date, timeout: float = 10.0) -> 
             data = json.loads(cached["data"])
             data["stale"] = True
             return data
-        return {"ok": False, "message": f"meteo non disponibile ({type(exc).__name__})"}
+        return {"ok": False, "message": "meteo non disponibile", "error": type(exc).__name__}
 
     conn.execute(
         "INSERT INTO weather_cache(lat, lon, date, data, fetched_at) VALUES (?,?,?,?,?) "

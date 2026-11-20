@@ -45,3 +45,19 @@ export type DayPlan = {
   outfits: { id: number; image: string | null; items: Item[]; rating: number | null; status: string }[];
   missing: string[];
 };
+
+export type Garment = {
+  id: number; name: string; category: string; category_id: number; slot: string; color_hex: string;
+  color_family: string; pattern: string; formality: number; weight: number; material: string | null;
+  rain_ok: number; rain_gear: number; set_key: string | null; size: string | null; brand: string | null;
+  price_eur: number | null; bought_on: string | null; status: string; city_id: number; photo: string;
+  cutout: string | null; notes: string | null; last_worn: string | null; colors?: { hex: string; share: number }[];
+};
+export type Category = { id: number; name: string; slot: string; repeat_days: number | null;
+  default_formality: number; default_weight: number };
+export type City = { id: number; name: string; lat: number; lon: number; country: string; is_home: number };
+export type ColorFamily = { name: string; hex: string; tone: string; depth: string };
+
+export const STATUS_LABEL: Record<string, string> = {
+  pulito: "Pulito", da_lavare: "Da lavare", tintoria: "In tintoria", valigia: "In valigia", sarta: "Dalla sarta",
+};

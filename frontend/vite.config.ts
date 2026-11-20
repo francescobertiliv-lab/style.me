@@ -13,6 +13,8 @@ export default defineConfig({
       srcDir: "src",
       filename: "sw.ts",
       registerType: "autoUpdate",
+      // il motore dello scontorno (onnx, ~23 MB) non va in cache all'installazione: si scarica solo quando serve
+      injectManifest: { globPatterns: ["**/*.{js,css,html,png,svg,woff2}"], globIgnores: ["**/ort*"] },
       manifest: {
         name: "Style.me",
         short_name: "Style.me",
@@ -31,4 +33,5 @@ export default defineConfig({
   ],
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
   server: { proxy: { "/api": "http://localhost:8000" } },
+  preview: { proxy: { "/api": "http://localhost:8000" } },
 });

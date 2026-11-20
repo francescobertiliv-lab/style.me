@@ -97,11 +97,13 @@ def suggestions(conn, max_items: int = 6) -> list[dict]:
     an = analysis(conn)
     missing_fams = [m["family"] for m in an["missing"]]
     add_fams = [p["family"] for p in an["palette"] if p["role"] == "da_aggiungere"]
-    families = list(dict.fromkeys(missing_fams + add_fams))
+    # prima i toni caldi da aggiungere, poi i colori base che mancano
+    families = list(dict.fromkeys(add_fams + missing_fams))
     have = {(g["category"], g["color_family"]) for g in owned}
-    out = []
+    out, used_cats = [], {}
     for fam in families:
-        for cat in INFORMAL_CATS:
+        # ruoto le categorie: meno ripetizioni di "overshirt" per ogni colore
+        for cat in sorted(INFORMAL_CATS, key=lambda c: used_cats.get(c, 0)):
             if (cat, fam) in have:
                 continue
             piece = virtual_piece(conn, cat, fam)
@@ -110,10 +112,11 @@ def suggestions(conn, max_items: int = 6) -> list[dict]:
                 out.append({
                     "category": cat, "family": fam, "hex": piece["color_hex"],
                     "description": f"{cat.capitalize()} {fam}, in {FABRIC.get(cat, 'tessuto di qualità')}",
-                    "why": "colore che ti manca" if fam in missing_fams else "tono caldo da aggiungere",
+                    "why": "tono da aggiungere" if fam in add_fams else "colore base che ti manca",
                     "budget": f"{prof.get('budget_min', 100)}–{prof.get('budget_max', 200)} €",
                     "outfits": combos,
                 })
+                used_cats[cat] = used_cats.get(cat, 0) + 1
                 break  # una proposta per colore
         if len(out) >= max_items:
             break

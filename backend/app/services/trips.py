@@ -50,12 +50,13 @@ def plan(conn, trip_id: int) -> dict:
                                  reserved=frozenset(reserved), prefer=frozenset(prefer), n=1,
                                  allowed_status=("pulito", "da_lavare", "tintoria", "valigia"))
         items = res["outfits"][0]["items"] if res["outfits"] else []
-        outfit_id = None
+        # salvo il giorno anche senza outfit, con cosa manca, così la schermata del viaggio lo dice
+        outfit_id = conn.insert(
+            "INSERT INTO outfits(date, city_id, trip_id, dress_code, day_type, weather, source, missing) "
+            "VALUES (?,?,?,?,?,?, 'viaggio', ?)",
+            (d.isoformat(), trip["city_id"], trip_id, info["dress_code"], info["week_label"], _json(w),
+             _json(res["missing"])))
         if items:
-            outfit_id = conn.insert(
-                "INSERT INTO outfits(date, city_id, trip_id, dress_code, day_type, weather, source) "
-                "VALUES (?,?,?,?,?,?, 'viaggio')",
-                (d.isoformat(), trip["city_id"], trip_id, info["dress_code"], info["week_label"], _json(w)))
             for it in items:
                 conn.execute("INSERT INTO outfit_items VALUES (?,?)", (outfit_id, it["id"]))
                 reserved.add(it["id"])
@@ -76,6 +77,19 @@ def plan(conn, trip_id: int) -> dict:
         f"WHERE g.id IN ({','.join('?' * len(packed_ids + list(worn_first))) or 'NULL'})",
         packed_ids + list(worn_first)))}
     packed = [garments[i] for i in packed_ids if garments[i]["city_id"] != trip["city_id"] or not trip["city_id"]]
+    # scorta: camicie o maglie in più, dello stesso registro dei giorni del viaggio
+    spare = conn.execute("SELECT spare_outfits FROM trip_templates WHERE id = ?", (trip["template_id"],)).fetchone()
+    spare_n = spare["spare_outfits"] if spare else 0
+    if spare_n and plan_days:
+        formal = sum(1 for p in plan_days if p["dress_code"] == "completo") > len(plan_days) / 2
+        taken = {g["id"] for g in packed} | worn_first
+        extra = rows(conn.execute(
+            "SELECT g.*, c.name AS category FROM garments g JOIN categories c ON c.id = g.category_id "
+            "WHERE c.slot = 'top' AND g.status = 'pulito' AND g.archived = 0 AND g.city_id = ? "
+            "ORDER BY ABS(g.formality - ?), g.id", (home, 4 if formal else 2)))
+        for g in [g for g in extra if g["id"] not in taken][:spare_n]:
+            g["name"] = f"{g['name']} (scorta)"
+            packed.append(g)
     for g in list(garments.values()):
         if g["status"] in ("da_lavare", "tintoria"):
             not_clean[g["id"]] = {"id": g["id"], "name": g["name"], "status": g["status"]}

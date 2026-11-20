@@ -40,6 +40,11 @@ export default function Tomorrow() {
     load(true);
   }
 
+  async function worn(outfitId: number) {
+    await api.post(`/outfits/${outfitId}/worn`);
+    load();
+  }
+
   async function rate(outfitId: number, rating: 1 | -1) {
     await api.post(`/outfits/${outfitId}/rate`, { rating });
     load();
@@ -113,6 +118,8 @@ export default function Tomorrow() {
                 onClick={() => rate(outfit.id, 1)}><ThumbsUp className="h-4 w-4" /></Button>
               <Button variant={outfit.rating === -1 ? "default" : "outline"} size="icon" aria-label="Non mi piace"
                 onClick={() => rate(outfit.id, -1)}><ThumbsDown className="h-4 w-4" /></Button>
+              <Button variant={outfit.status === "indossato" ? "default" : "outline"} size="sm"
+                onClick={() => worn(outfit.id)}>{outfit.status === "indossato" ? "Indossato" : "L'ho messo"}</Button>
               <Button variant="ghost" className="ml-auto" disabled={busy} onClick={() => load(true)}>
                 <RefreshCw className={cn("h-4 w-4", busy && "animate-spin")} /> Ricalcola
               </Button>

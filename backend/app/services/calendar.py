@@ -82,7 +82,7 @@ def refresh(conn, timeout: float = 10.0) -> dict:
         resp.raise_for_status()
         weeks, holidays = _parse(resp.json())
     except Exception as exc:  # rete, JSON non valido, 404...
-        return {"ok": False, "message": f"the361 non risponde ({type(exc).__name__})"}
+        return {"ok": False, "message": "the361 non risponde", "error": type(exc).__name__}
     now = datetime.now().isoformat(timespec="seconds")
     n = 0
     for w in weeks:

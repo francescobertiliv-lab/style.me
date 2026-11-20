@@ -302,7 +302,7 @@ def _explain_missing(slot, every, reasons, city_name, formal) -> str:
     label = NONE_LABEL.get(key, slot)
     why = reasons.get("giacca" if slot == "completo" else slot, {})
     if why:
-        detail = ", ".join(f"{n} {w}" for w, n in why.items())
+        detail = ", ".join(f"{w} ({n})" for w, n in why.items())
         return f"{label} disponibile a {city_name}: {detail}."
     return f"{label} a {city_name}: nel guardaroba non ne ho trovati."
 
