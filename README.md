@@ -40,28 +40,26 @@ Per i test: `cd backend && pytest`. Per provarli anche su Postgres, aggiungi `TE
 
 ## Metterla online
 
-Una volta sola, in quest'ordine.
+Una volta sola, in quest'ordine. Non serve copiare chiavi a mano: password, chiave Resend e segreti si sistemano dall'app.
 
-**1. Supabase (database e foto)**
-- Usa un progetto nuovo oppure quello di LAURUS: le tabelle di Style.me stanno in uno schema separato, `styleme`, e non toccano niente di LAURUS.
-- Da *Connect → Transaction pooler* copia la stringa di connessione (porta 6543). Va in `DATABASE_URL`.
-- Da *Storage* crea un bucket **privato** che si chiama `styleme`.
-- Da *Project Settings → API* prendi `URL` e la chiave `service_role`.
-
-**2. Resend (mail)**
-- Puoi usare la stessa chiave di LAURUS. `EMAIL_FROM` deve essere un indirizzo del dominio verificato su Resend. `MAIL_TO` è dove ricevi la mail della sera.
-
-**3. Vercel**
+**1. Vercel**
 - *Add New → Project*, scegli il repo `style.me` e lascia la cartella principale com'è: `vercel.json` sa già cosa fare.
-- In *Environment Variables* metti tutte le voci di `.env.example`, con `COOKIE_SECURE=1` e `APP_URL` uguale all'indirizzo che ti dà Vercel.
-- `CRON_SECRET`: una stringa lunga a caso. Vercel la usa da solo per il suo cron.
+- Finché la PR non è unita, in *Settings → Git* metti `fase-1` come *Production Branch*.
 
-**4. GitHub**
-- Nel repo, *Settings → Secrets and variables → Actions*, aggiungi `APP_URL` e `CRON_SECRET` (lo stesso di Vercel).
+**2. Supabase (database e foto)**
+- Dal progetto Vercel, *Storage → Connect Database → Supabase*. L'integrazione crea il progetto e mette da sola `POSTGRES_URL`, `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY`.
+- In alternativa puoi usare il progetto di LAURUS: le tabelle di Style.me stanno nello schema `styleme` e non toccano niente. In quel caso metti a mano `DATABASE_URL` (Transaction pooler, porta 6543), `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY`.
+- Il bucket privato `styleme` per le foto lo crea l'app al primo caricamento.
+- Dopo aver collegato il database, rifai il deploy (*Deployments → Redeploy*).
 
-**5. Prima apertura**
-- Entra, apri *Impostazioni* e premi *Mail di prova*. Se arriva, la sera arriverà anche l'outfit.
-- Su iPhone: Safari → Condividi → *Aggiungi alla schermata Home*. L'app si apre a tutto schermo come un'app vera.
+**3. GitHub**
+- Nel repo, *Settings → Secrets and variables → Actions*, aggiungi `APP_URL` con l'indirizzo che ti dà Vercel. Serve al cron della sera.
+- `CRON_SECRET` è facoltativo: se lo metti, va uguale qui e su Vercel.
+
+**4. Primo avvio**
+- Apri l'indirizzo: parte il primo avvio guidato. Scegli la password, la città, l'ora della mail.
+- Al passo della mail scrivi la chiave Resend (la stessa di LAURUS va bene) e premi *Salva e mandami una prova*.
+- Su iPhone: Safari → Condividi → *Aggiungi alla schermata Home*.
 
 ## Cose da sapere
 
