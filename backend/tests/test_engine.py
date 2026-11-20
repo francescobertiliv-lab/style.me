@@ -1,33 +1,44 @@
+import os
 from datetime import date
 
 import pytest
 
-from app import db
+from app import config, db
 from app.services import calendar, engine
 
 
-@pytest.fixture
-def conn(tmp_path):
-    path = tmp_path / "t.db"
-    db.init_db(path)
-    c = db.connect(path)
+PG_URL = os.environ.get("TEST_PG_URL")  # es. postgresql://postgres@localhost:5433/postgres
+
+
+@pytest.fixture(params=["sqlite"] + (["postgres"] if PG_URL else []))
+def conn(request, tmp_path, monkeypatch):
+    if request.param == "sqlite":
+        url = f"sqlite:///{tmp_path / 't.db'}"
+    else:
+        url = PG_URL
+        monkeypatch.setattr(config, "DB_SCHEMA", f"test_{os.getpid()}")
+        import psycopg
+        with psycopg.connect(url, autocommit=True) as raw:
+            raw.execute(f'DROP SCHEMA IF EXISTS "{config.DB_SCHEMA}" CASCADE')
+    db.init_db(url)
+    c = db.connect(url)
     yield c
+    c.rollback()
     c.close()
 
 
 def cat(conn, name):
-    return conn.execute("SELECT id FROM categories WHERE name=?", (name,)).fetchone()[0]
+    return conn.execute("SELECT id FROM categories WHERE name=?", (name,)).fetchone()["id"]
 
 
 def add(conn, name, category, family, formality, weight=2, set_key=None, status="pulito",
         city=1, rain_ok=1, rain_gear=0, pattern="tinta unita"):
-    hexc = conn.execute("SELECT hex FROM color_families WHERE name=?", (family,)).fetchone()[0]
-    cur = conn.execute(
+    hexc = conn.execute("SELECT hex FROM color_families WHERE name=?", (family,)).fetchone()["hex"]
+    return conn.insert(
         "INSERT INTO garments(name, category_id, set_key, color_hex, color_family, pattern, formality, weight,"
         " rain_ok, rain_gear, status, city_id, photo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'x.jpg')",
         (name, cat(conn, category), set_key, hexc, family, pattern, formality, weight, rain_ok, rain_gear, status, city),
     )
-    return cur.lastrowid
 
 
 SUNNY = {"ok": True, "tmax": 18, "tmin": 10, "rain_mm": 0, "rain_prob": 10, "code": 1, "summary": "sereno"}
@@ -101,9 +112,9 @@ def test_missing_explained(conn):
 
 def test_repeat_days(conn):
     wardrobe(conn)
-    shirt = conn.execute("SELECT id FROM garments WHERE name='Camicia bianca'").fetchone()[0]
-    cur = conn.execute("INSERT INTO outfits(date, dress_code, source, status) VALUES ('2026-11-18','completo','manuale','indossato')")
-    conn.execute("INSERT INTO outfit_items VALUES (?,?)", (cur.lastrowid, shirt))
+    shirt = conn.execute("SELECT id FROM garments WHERE name='Camicia bianca'").fetchone()["id"]
+    oid = conn.insert("INSERT INTO outfits(date, dress_code, source, status) VALUES ('2026-11-18','completo','manuale','indossato')")
+    conn.execute("INSERT INTO outfit_items VALUES (?,?)", (oid, shirt))
     res = engine.suggest(conn, date(2026, 11, 23), 1, "completo", SUNNY)
     for o in res["outfits"]:
         assert shirt not in {i["id"] for i in o["items"]}

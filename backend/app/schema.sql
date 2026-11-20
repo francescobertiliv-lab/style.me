@@ -111,6 +111,43 @@ CREATE TABLE weather_cache (
   PRIMARY KEY (lat, lon, date)
 );
 
+-- ============ SEZIONE 3: INVENTARIO E KIT ============
+
+-- Oggetti che possiedo. Anche calze e intimo stanno qui, contati e non fotografati.
+CREATE TABLE items (
+  id          INTEGER PRIMARY KEY,
+  name        TEXT NOT NULL UNIQUE,
+  owned_qty   INTEGER NOT NULL DEFAULT 0,
+  consumable  INTEGER NOT NULL DEFAULT 0,
+  running_low INTEGER NOT NULL DEFAULT 0, -- "quasi finito"
+  refill_from TEXT,                       -- chi chiedere per la ricarica
+  per_night   INTEGER NOT NULL DEFAULT 0, -- quanti per notte di viaggio (calze, intimo)
+  notes       TEXT
+);
+
+CREATE TABLE kits (
+  id    INTEGER PRIMARY KEY,
+  name  TEXT NOT NULL UNIQUE,
+  place TEXT,                            -- dove sta
+  notes TEXT
+);
+
+CREATE TABLE kit_items (
+  kit_id  INTEGER NOT NULL REFERENCES kits(id) ON DELETE CASCADE,
+  item_id INTEGER NOT NULL REFERENCES items(id),
+  qty     INTEGER NOT NULL DEFAULT 1 CHECK (qty > 0),
+  PRIMARY KEY (kit_id, item_id)
+);
+
+-- Lista della spesa calcolata, mai scritta a mano.
+CREATE VIEW shopping_list AS
+SELECT i.id, i.name, r.needed - i.owned_qty AS qty, 'per completare i kit' AS reason
+FROM items i
+JOIN (SELECT item_id, SUM(qty) AS needed FROM kit_items GROUP BY item_id) r ON r.item_id = i.id
+WHERE r.needed > i.owned_qty
+UNION ALL
+SELECT id, name, NULL, 'quasi finito' FROM items WHERE running_low = 1;
+
 -- ============ SEZIONE 2: VIAGGI E VALIGIE ============
 
 CREATE TABLE trip_templates (
@@ -192,43 +229,6 @@ CREATE TABLE outfit_items (
   garment_id INTEGER NOT NULL REFERENCES garments(id),
   PRIMARY KEY (outfit_id, garment_id)
 );
-
--- ============ SEZIONE 3: INVENTARIO E KIT ============
-
--- Oggetti che possiedo. Anche calze e intimo stanno qui, contati e non fotografati.
-CREATE TABLE items (
-  id          INTEGER PRIMARY KEY,
-  name        TEXT NOT NULL UNIQUE,
-  owned_qty   INTEGER NOT NULL DEFAULT 0,
-  consumable  INTEGER NOT NULL DEFAULT 0,
-  running_low INTEGER NOT NULL DEFAULT 0, -- "quasi finito"
-  refill_from TEXT,                       -- chi chiedere per la ricarica
-  per_night   INTEGER NOT NULL DEFAULT 0, -- quanti per notte di viaggio (calze, intimo)
-  notes       TEXT
-);
-
-CREATE TABLE kits (
-  id    INTEGER PRIMARY KEY,
-  name  TEXT NOT NULL UNIQUE,
-  place TEXT,                            -- dove sta
-  notes TEXT
-);
-
-CREATE TABLE kit_items (
-  kit_id  INTEGER NOT NULL REFERENCES kits(id) ON DELETE CASCADE,
-  item_id INTEGER NOT NULL REFERENCES items(id),
-  qty     INTEGER NOT NULL DEFAULT 1 CHECK (qty > 0),
-  PRIMARY KEY (kit_id, item_id)
-);
-
--- Lista della spesa calcolata, mai scritta a mano.
-CREATE VIEW shopping_list AS
-SELECT i.id, i.name, r.needed - i.owned_qty AS qty, 'per completare i kit' AS reason
-FROM items i
-JOIN (SELECT item_id, SUM(qty) AS needed FROM kit_items GROUP BY item_id) r ON r.item_id = i.id
-WHERE r.needed > i.owned_qty
-UNION ALL
-SELECT id, name, NULL, 'quasi finito' FROM items WHERE running_low = 1;
 
 -- ============ SEZIONE 4: STILE, ACQUISTI, SARTA ============
 

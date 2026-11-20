@@ -99,5 +99,5 @@ def refresh(conn, timeout: float = 10.0) -> dict:
         )
         n += 1
     for h in holidays:
-        conn.execute("INSERT OR IGNORE INTO ep_holidays(date) VALUES (?)", (h,))
+        conn.execute("INSERT INTO ep_holidays(date) VALUES (?) ON CONFLICT DO NOTHING", (h,))
     return {"ok": True, "message": f"{n} settimane aggiornate"}

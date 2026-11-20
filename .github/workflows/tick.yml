@@ -1,0 +1,32 @@
+# Sveglia di Style.me. Chiama l'app ogni 15 minuti la sera (17:00–20:45 UTC, cioè
+# 18–21:45 d'inverno e 19–22:45 d'estate a Bruxelles) e una volta al mattino.
+# L'app decide da sola cosa fare in base all'ora locale e manda la mail serale una volta sola.
+# Riserva: il cron di Vercel in vercel.json chiama lo stesso indirizzo una volta al giorno.
+# Nota: GitHub sospende i cron dei repo senza commit da 60 giorni. Basta un commit
+# qualunque (o "Enable workflow" dalla scheda Actions) per riattivarli.
+name: tick
+
+on:
+  schedule:
+    - cron: "*/15 17-20 * * *"
+    - cron: "15 5 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: tick
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Chiama l'app
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -fsS --max-time 90 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/tick"

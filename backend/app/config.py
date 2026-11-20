@@ -18,7 +18,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 _load_dotenv(BASE_DIR.parent / ".env")
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", BASE_DIR / "data"))
-DB_PATH = DATA_DIR / "app.db"
+DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{DATA_DIR / 'app.db'}")
+DB_SCHEMA = os.environ.get("DB_SCHEMA", "styleme")
 PHOTOS_DIR = DATA_DIR / "photos"
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-change-me")
@@ -30,15 +31,17 @@ VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:admin@localhost")
 
 APP_URL = os.environ.get("APP_URL", "http://localhost:5173")
-RUN_SCHEDULER = os.environ.get("RUN_SCHEDULER", "1") == "1"
 
-for sub in ("originals", "cutouts", "outfits", "models"):
-    (PHOTOS_DIR / sub).mkdir(parents=True, exist_ok=True)
 
-# Mail (canale principale degli avvisi). Va bene qualunque SMTP: Gmail con password per app, Resend, ecc.
-SMTP_HOST = os.environ.get("SMTP_HOST", "")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER = os.environ.get("SMTP_USER", "")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
-MAIL_FROM = os.environ.get("MAIL_FROM", "")
+# Mail con Resend, come LAURUS (canale principale degli avvisi)
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "")
 MAIL_TO = os.environ.get("MAIL_TO", "")
+
+# Foto su Supabase Storage. Se mancano, le foto restano in DATA_DIR/photos.
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+SUPABASE_BUCKET = os.environ.get("SUPABASE_BUCKET", "styleme")
+
+# Segreto che il cron deve mandare per avviare i lavori pianificati
+CRON_SECRET = os.environ.get("CRON_SECRET", "")

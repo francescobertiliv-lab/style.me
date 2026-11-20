@@ -60,7 +60,7 @@ def pair_feedback(conn) -> dict[tuple[int, int], float]:
     fb: dict[tuple[int, int], float] = {}
     outfits = conn.execute("SELECT id, rating FROM outfits WHERE rating IS NOT NULL").fetchall()
     for o in outfits:
-        ids = sorted(r[0] for r in conn.execute(
+        ids = sorted(r["garment_id"] for r in conn.execute(
             "SELECT garment_id FROM outfit_items WHERE outfit_id = ?", (o["id"],)))
         for a, b in itertools.combinations(ids, 2):
             fb[(a, b)] = fb.get((a, b), 0) + o["rating"]

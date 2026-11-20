@@ -43,7 +43,8 @@ def dominant_colors(img: Image.Image, k: int = 4) -> list[dict]:
     """Colori dominanti dei pixel non trasparenti: [{hex, share}] dal più presente."""
     im = img.convert("RGBA")
     im.thumbnail((200, 200))
-    pixels = [p[:3] for p in im.getdata() if p[3] > 128]
+    data = im.get_flattened_data() if hasattr(im, "get_flattened_data") else im.getdata()
+    pixels = [p[:3] for p in data if p[3] > 128]
     if not pixels:
         return []
     flat = Image.new("RGB", (len(pixels), 1))

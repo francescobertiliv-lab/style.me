@@ -52,11 +52,10 @@ def plan(conn, trip_id: int) -> dict:
         items = res["outfits"][0]["items"] if res["outfits"] else []
         outfit_id = None
         if items:
-            cur = conn.execute(
+            outfit_id = conn.insert(
                 "INSERT INTO outfits(date, city_id, trip_id, dress_code, day_type, weather, source) "
                 "VALUES (?,?,?,?,?,?, 'viaggio')",
                 (d.isoformat(), trip["city_id"], trip_id, info["dress_code"], info["week_label"], _json(w)))
-            outfit_id = cur.lastrowid
             for it in items:
                 conn.execute("INSERT INTO outfit_items VALUES (?,?)", (outfit_id, it["id"]))
                 reserved.add(it["id"])

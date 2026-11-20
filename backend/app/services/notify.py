@@ -1,33 +1,34 @@
 """Avvisi: mail (canale principale) e web push (facoltativo). Tutto finisce in notification_log."""
+import base64
 import json
-import smtplib
-from email.message import EmailMessage
-from email.utils import make_msgid
+
+import httpx
 
 from .. import config
+from . import storage
 
 
 def send_email(subject: str, text: str, html: str | None = None, image_path: str | None = None) -> bool:
-    if not (config.SMTP_HOST and config.MAIL_TO):
+    """Mail con Resend. L'immagine dell'outfit va dentro la mail come allegato in linea."""
+    if not (config.RESEND_API_KEY and config.EMAIL_FROM and config.MAIL_TO):
         return False
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = config.MAIL_FROM or config.SMTP_USER
-    msg["To"] = config.MAIL_TO
-    msg.set_content(text)
+    payload = {"from": config.EMAIL_FROM, "to": [config.MAIL_TO], "subject": subject, "text": text}
     if html:
-        cid = make_msgid()
-        body = html.replace("{{image}}", f'<img src="cid:{cid[1:-1]}" width="360" alt="outfit">' if image_path else "")
-        msg.add_alternative(body, subtype="html")
-        if image_path:
-            full = config.PHOTOS_DIR / image_path
-            if full.exists():
-                msg.get_payload()[1].add_related(full.read_bytes(), "image", "jpeg", cid=cid)
-    with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=20) as s:
-        s.starttls()
-        if config.SMTP_USER:
-            s.login(config.SMTP_USER, config.SMTP_PASSWORD)
-        s.send_message(msg)
+        payload["html"] = html.replace("{{image}}", "")
+    data = storage.get(image_path) if image_path else None
+    if html and data:
+        payload["html"] = html.replace(
+            "{{image}}", '<img src="cid:outfit" width="360" alt="outfit" style="border-radius:12px">')
+        payload["attachments"] = [{"filename": "outfit.jpg", "content": base64.b64encode(data).decode(),
+                                   "content_id": "outfit"}]
+    r = httpx.post("https://api.resend.com/emails", json=payload,
+                   headers={"Authorization": f"Bearer {config.RESEND_API_KEY}"}, timeout=20)
+    if r.status_code == 422 and "attachments" in payload:  # senza immagine piuttosto che niente
+        payload.pop("attachments")
+        payload["html"] = html.replace("{{image}}", "")
+        r = httpx.post("https://api.resend.com/emails", json=payload,
+                       headers={"Authorization": f"Bearer {config.RESEND_API_KEY}"}, timeout=20)
+    r.raise_for_status()
     return True
 
 
