@@ -53,7 +53,7 @@ Una volta sola, in quest'ordine. Non serve copiare chiavi a mano: password, chia
 - Dopo aver collegato il database, rifai il deploy (*Deployments → Redeploy*).
 
 **3. GitHub**
-- Nel repo, *Settings → Secrets and variables → Actions*, aggiungi `APP_URL` con l'indirizzo che ti dà Vercel. Serve al cron della sera.
+- Il cron di GitHub chiama già https://style-me-delta.vercel.app. Se cambi indirizzo, metti il nuovo nel secret `APP_URL` del repo. I cron di GitHub partono solo dal ramo principale: finché la PR non è unita, la mail della sera la manda il cron di Vercel (20:40 d'inverno).
 - `CRON_SECRET` è facoltativo: se lo metti, va uguale qui e su Vercel.
 
 **4. Primo avvio**
