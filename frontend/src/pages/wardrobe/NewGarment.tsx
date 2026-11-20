@@ -22,6 +22,9 @@ export default function NewGarment() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const wishlistId = params.get("desiderio");
+  const presetCategory = params.get("categoria");  // dal primo avvio: so già cosa stai fotografando
+  const after = params.get("dopo");
+  const presetSet = params.get("completo") ?? "";
 
   async function onFile(file: File) {
     try {
@@ -45,9 +48,9 @@ export default function NewGarment() {
     const cities = await api.get<{ id: number; is_home: number }[]>("/cities");
     const p = up.proposal;
     setDraft({
-      name: "", category_id: p.category_id ?? "", color_hex: p.color_hex, color_family: p.color_family, colors: p.colors,
+      name: "", category_id: presetCategory ? Number(presetCategory) : p.category_id ?? "", color_hex: p.color_hex, color_family: p.color_family, colors: p.colors,
       pattern: p.pattern, formality: p.formality, weight: p.weight, material: "", rain_ok: 1, rain_gear: 0,
-      set_key: "", size: "", brand: "", price_eur: "", status: "pulito",
+      set_key: presetSet, size: "", brand: "", price_eur: "", status: "pulito",
       city_id: cities.find((c) => c.is_home)?.id ?? cities[0].id, photo: up.photo, cutout: up.cutout, notes: "",
     });
     setStep("dati");
@@ -55,7 +58,7 @@ export default function NewGarment() {
 
   async function save(d: GarmentDraft) {
     const r = await api.post<{ id: number }>(`/garments${wishlistId ? `?wishlist_id=${wishlistId}` : ""}`, toPayload(d));
-    navigate(`/guardaroba/${r.id}`, { replace: true });
+    navigate(after?.startsWith("/") ? after : `/guardaroba/${r.id}`, { replace: true });
   }
 
   return (

@@ -1,8 +1,11 @@
-import { NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { api } from "@/lib/api";
 import { Backpack, CalendarDays, Palette, Plane, Settings as SettingsIcon, Shirt } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Tomorrow from "@/pages/Tomorrow";
 import Login from "@/pages/Login";
+import Welcome from "@/pages/Welcome";
 import Settings from "@/pages/Settings";
 import Wardrobe from "@/pages/wardrobe/Wardrobe";
 import NewGarment from "@/pages/wardrobe/NewGarment";
@@ -26,8 +29,24 @@ const tabs = [
   { to: "/stile", label: "Stile", icon: Palette },
 ];
 
+type Me = { logged_in: boolean; needs_setup: boolean; onboarded: boolean };
+
 export default function App() {
   const { pathname } = useLocation();
+  const [me, setMe] = useState<(Me & { path: string }) | null>(null);
+  // Si ricontrolla a ogni cambio di pagina: dopo il primo avvio l'app si apre normalmente.
+  useEffect(() => {
+    api.get<Me>("/auth/me")
+      .then((m) => setMe({ ...m, path: pathname }))
+      .catch(() => setMe({ logged_in: true, needs_setup: false, onboarded: true, path: pathname }));
+  }, [pathname]);
+
+  if (pathname === "/benvenuto") return <Welcome />;
+  if (!me) return null;
+  const goto = me.needs_setup ? "/benvenuto" : !me.logged_in ? "/login"
+    : !me.onboarded && !pathname.startsWith("/guardaroba/nuovo") ? "/benvenuto" : null;
+  // Si reindirizza solo con una risposta fresca, letta per questa pagina.
+  if (goto && goto !== pathname) return me.path === pathname ? <Navigate to={goto} replace /> : null;
   if (pathname === "/login") return <Login />;
   return (
     <div className="mx-auto flex min-h-full max-w-xl flex-col">

@@ -137,25 +137,13 @@ def check(combo: list[dict], rules: list[dict]) -> tuple[bool, float, list[str]]
 
 # ---------- motore ----------
 
-def _jitter(day: date, ids) -> float:
-    h = hashlib.md5(f"{day}-{sorted(ids)}".encode()).hexdigest()
-    return int(h[:4], 16) / 0xFFFF * 0.2
-
-
-def suggest(conn, day: date, city_id: int, dress_code: str, weather: dict, *,
-            extra_city_ids=(), extra_ids=(), reserved=frozenset(), prefer=frozenset(),
-            allowed_status=("pulito",), n: int = 3) -> dict:
-    """Propone fino a n outfit. reserved = capi già usati in giorni vicini (viaggi);
-    prefer = capi già in valigia da riusare."""
-    city_ids = [city_id, *extra_city_ids]
-    city_name = conn.execute("SELECT name FROM cities WHERE id = ?", (city_id,)).fetchone()
-    city_name = city_name["name"] if city_name else "qui"
+def available(conn, day: date, city_ids, weather: dict, *, extra_ids=(), reserved=frozenset(),
+              allowed_status=("pulito",)) -> dict:
+    """Capi utilizzabili quel giorno, divisi per slot, con i motivi degli esclusi."""
     every = load_garments(conn, city_ids, extra_ids)
     worn = last_worn(conn, day)
     rain = wx.is_rainy(conn, weather)
     tw = target_weight(conn, weather)
-    climate = get_setting(conn, "climate", {"coat_below": 15, "layer_below": 12})
-
     reasons: dict[str, dict[str, int]] = {}
 
     def usable(g) -> bool:
@@ -178,20 +166,97 @@ def suggest(conn, day: date, city_id: int, dress_code: str, weather: dict, *,
 
     pool = [g for g in every if usable(g)]
     by = {s: [g for g in pool if g["slot"] == s] for s in SLOT_LABEL}
+    return {"every": every, "pool": pool, "by": by, "reasons": reasons, "rain": rain, "tw": tw, "worn": worn}
+
+
+def candidates(by: dict, dress_code: str) -> dict:
+    """Capi ammessi per ogni posto dell'outfit, secondo il dress code."""
+    if dress_code == "completo":
+        jackets = [g for g in by["giacca"] if g["set_key"] and g["formality"] >= 4]
+        return {
+            "completo": [(j, s) for j in jackets for s in by["sotto"] if s["set_key"] == j["set_key"]],
+            "top": [g for g in by["top"] if g["formality"] >= 4],
+            "cravatta": by["cravatta"],
+            "scarpe": [g for g in by["scarpe"] if g["formality"] >= 4],
+            "strato": by["strato"],
+            "capospalla": [g for g in by["capospalla"] if g["formality"] >= 3] or by["capospalla"],
+        }
+    return {
+        "top": [g for g in by["top"] if g["formality"] <= 4],
+        "sotto": [g for g in by["sotto"] if not g["set_key"]],
+        "scarpe": [g for g in by["scarpe"] if g["formality"] <= 4],
+        "giacca": [g for g in by["giacca"] if not g["set_key"]],
+        "strato": by["strato"],
+        "capospalla": by["capospalla"],
+    }
+
+
+OPTIONAL = {"completo": ("strato", "capospalla"), "informale": ("giacca", "strato", "capospalla"),
+            "libero": ("giacca", "strato", "capospalla")}
+
+
+def swap_options(conn, outfit: dict, items: list[dict], slot: str, limit: int = 8) -> dict:
+    """Alternative per un posto dell'outfit, compatibili con il resto. Per il completo si cambia la coppia."""
+    day = date.fromisoformat(outfit["date"])
+    weather = json.loads(outfit["weather"] or "{}") or {"ok": False}
+    city_id = outfit["city_id"] or get_setting(conn, "home_city_id", 1)
+    av = available(conn, day, [city_id], weather, extra_ids=tuple(i["id"] for i in items))
+    cands = candidates(av["by"], outfit["dress_code"])
+    rules = load_rules(conn)
+    full = {g["id"]: g for g in load_garments(conn, [city_id], tuple(i["id"] for i in items))}
+    current = [full[i["id"]] for i in items if i["id"] in full]
+    formal_pair = outfit["dress_code"] == "completo" and slot in ("giacca", "sotto")
+    if formal_pair:
+        rest = [g for g in current if g["slot"] not in ("giacca", "sotto")]
+        options = [list(pair) for pair in cands["completo"]]
+        now = [g for g in current if g["slot"] in ("giacca", "sotto")]
+    else:
+        rest = [g for g in current if g["slot"] != slot]
+        options = [[g] for g in cands.get(slot, [])]
+        now = [g for g in current if g["slot"] == slot]
+    now_ids = {g["id"] for g in now}
+    scored = []
+    for opt in options:
+        if {g["id"] for g in opt} == now_ids:
+            continue
+        ok, pts, broken = check(rest + opt, rules)
+        if ok:
+            scored.append((pts, opt))
+    scored.sort(key=lambda x: -x[0])
+    return {
+        "slot": slot,
+        "current": [_public(g) for g in now],
+        "removable": slot in OPTIONAL.get(outfit["dress_code"], ()) and bool(now),
+        "options": [[_public(g) for g in opt] for _, opt in scored[:limit]],
+    }
+
+
+def _jitter(day: date, ids) -> float:
+    h = hashlib.md5(f"{day}-{sorted(ids)}".encode()).hexdigest()
+    return int(h[:4], 16) / 0xFFFF * 0.2
+
+
+def suggest(conn, day: date, city_id: int, dress_code: str, weather: dict, *,
+            extra_city_ids=(), extra_ids=(), reserved=frozenset(), prefer=frozenset(),
+            allowed_status=("pulito",), n: int = 3) -> dict:
+    """Propone fino a n outfit. reserved = capi già usati in giorni vicini (viaggi);
+    prefer = capi già in valigia da riusare."""
+    city_ids = [city_id, *extra_city_ids]
+    city_name = conn.execute("SELECT name FROM cities WHERE id = ?", (city_id,)).fetchone()
+    city_name = city_name["name"] if city_name else "qui"
+    av = available(conn, day, city_ids, weather, extra_ids=extra_ids, reserved=reserved, allowed_status=allowed_status)
+    every, reasons, rain, tw, worn = av["every"], av["reasons"], av["rain"], av["tw"], av["worn"]
+    climate = get_setting(conn, "climate", {"coat_below": 15, "layer_below": 12})
+    by = av["by"]
 
     formal = dress_code == "completo"
+    c = candidates(by, dress_code)
     if formal:
-        jackets = [g for g in by["giacca"] if g["set_key"] and g["formality"] >= 4]
-        suits = [(j, s) for j in jackets for s in by["sotto"] if s["set_key"] == j["set_key"]]
-        tops = [g for g in by["top"] if g["formality"] >= 4]
-        ties = by["cravatta"]
-        shoes = [g for g in by["scarpe"] if g["formality"] >= 4]
+        suits, tops, ties, shoes = c["completo"], c["top"], c["cravatta"], c["scarpe"]
         required = {"completo": suits, "top": tops, "cravatta": ties, "scarpe": shoes}
     else:
-        tops = [g for g in by["top"] if g["formality"] <= 4]
-        bottoms = [g for g in by["sotto"] if not g["set_key"]]
-        shoes = [g for g in by["scarpe"] if g["formality"] <= 4]
-        jackets = [None] + [g for g in by["giacca"] if not g["set_key"]]
+        tops, bottoms, shoes = c["top"], c["sotto"], c["scarpe"]
+        jackets = [None] + c["giacca"]
         required = {"top": tops, "sotto": bottoms, "scarpe": shoes}
 
     missing = []

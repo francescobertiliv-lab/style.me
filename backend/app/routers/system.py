@@ -10,7 +10,8 @@ from ..services import calendar, jobs, notify
 router = APIRouter(prefix="/api", dependencies=[Depends(require_user)])
 cron = APIRouter(prefix="/api/cron")
 
-EDITABLE = ("notify_time", "trip_alert_days", "the361_url", "home_city_id", "timezone", "rain", "climate", "plenary_trip")
+EDITABLE = ("notify_time", "trip_alert_days", "the361_url", "home_city_id", "timezone", "rain", "climate", "plenary_trip",
+            "mail_to", "email_from", "onboarded")
 
 
 @router.get("/settings")
@@ -23,6 +24,19 @@ def save_settings(body: dict, db=Depends(get_db)):
     for k, v in body.items():
         if k in EDITABLE:
             set_setting(db, k, v)
+    if "home_city_id" in body:
+        db.execute("UPDATE cities SET is_home = CASE WHEN id = ? THEN 1 ELSE 0 END", (int(body["home_city_id"]),))
+    return {"ok": True}
+
+
+class Key(BaseModel):
+    key: str
+
+
+@router.put("/settings/resend-key")
+def resend_key(body: Key, db=Depends(get_db)):
+    """La chiave di Resend la scrivi tu nell'app: resta nel database e non torna mai indietro."""
+    set_setting(db, "resend_api_key", body.key.strip())
     return {"ok": True}
 
 
@@ -30,7 +44,8 @@ def save_settings(body: dict, db=Depends(get_db)):
 def status(db=Depends(get_db)):
     return {
         "calendar": get_setting(db, "calendar_status", {}),
-        "mail": bool(config.RESEND_API_KEY and config.MAIL_TO),
+        "mail": all(notify.mail_config(db).values()),
+        "mail_to": notify.mail_config(db)["to"],
         "push": bool(config.VAPID_PUBLIC_KEY),
         "photos": "supabase" if config.SUPABASE_URL else "locale",
         "last_evening": get_setting(db, "last_evening"),
@@ -116,6 +131,7 @@ def subscribe(body: Sub, db=Depends(get_db)):
 @cron.api_route("/tick", methods=["GET", "POST"])
 def tick(authorization: str = Header(""), db=Depends(get_db)):
     """Chiamato da GitHub Actions ogni 10 minuti la sera e dal cron di Vercel come riserva."""
-    if not config.CRON_SECRET or authorization != f"Bearer {config.CRON_SECRET}":
+    # Se CRON_SECRET non è impostato il tick è aperto: fa solo lavori che girano una volta al giorno.
+    if config.CRON_SECRET and authorization != f"Bearer {config.CRON_SECRET}":
         raise HTTPException(401)
     return jobs.tick(db)

@@ -45,7 +45,8 @@ def build(conn, d: date, refresh: bool = False) -> dict:
     w = wx.forecast(conn, lat, lon, d)
 
     if refresh:
-        conn.execute("DELETE FROM outfits WHERE date = ? AND source = 'motore' AND status = 'proposto'",
+        # Ricalcola: via le proposte e le scelte non ancora indossate (i giorni di viaggio restano).
+        conn.execute("DELETE FROM outfits WHERE date = ? AND source != 'viaggio' AND status != 'indossato'",
                      (d.isoformat(),))
     existing = outfits_for(conn, d)
     missing: list[str] = []
@@ -79,5 +80,7 @@ def build(conn, d: date, refresh: bool = False) -> dict:
         "trip": {"id": trip["id"], "destination": trip["destination"]} if trip else None,
         "outfits": [{"id": o["id"], "image": o["image"], "items": o["items"], "rating": o["rating"],
                      "status": o["status"], "source": o["source"]} for o in existing],
+        "chosen": bool(conn.execute("SELECT 1 FROM outfits WHERE date = ? AND status = 'scartato'",
+                                    (d.isoformat(),)).fetchone()),
         "missing": missing,
     }

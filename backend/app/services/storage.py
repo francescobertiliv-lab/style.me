@@ -15,10 +15,20 @@ def _headers(content_type: str | None = None) -> dict:
     return h
 
 
+def _ensure_bucket() -> None:
+    """Crea il bucket privato al primo caricamento, se non c'è."""
+    httpx.post(f"{config.SUPABASE_URL}/storage/v1/bucket", headers=_headers("application/json"),
+               json={"id": config.SUPABASE_BUCKET, "name": config.SUPABASE_BUCKET, "public": False}, timeout=15)
+
+
 def put(path: str, data: bytes, content_type: str) -> str:
     if _supabase():
-        r = httpx.post(f"{config.SUPABASE_URL}/storage/v1/object/{config.SUPABASE_BUCKET}/{path}",
-                       content=data, headers={**_headers(content_type), "x-upsert": "true"}, timeout=30)
+        url = f"{config.SUPABASE_URL}/storage/v1/object/{config.SUPABASE_BUCKET}/{path}"
+        headers = {**_headers(content_type), "x-upsert": "true"}
+        r = httpx.post(url, content=data, headers=headers, timeout=30)
+        if r.status_code in (400, 404) and "not found" in r.text.lower():
+            _ensure_bucket()
+            r = httpx.post(url, content=data, headers=headers, timeout=30)
         r.raise_for_status()
     else:
         full = config.PHOTOS_DIR / path

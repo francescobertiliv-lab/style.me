@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from ..auth import require_user
 from ..db import get_db, rows
-from ..services import composer, day as dayplan, jobs
+from ..services import composer, day as dayplan, engine, jobs
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_user)])
 
@@ -102,3 +102,57 @@ def history(start: date | None = None, end: date | None = None, db=Depends(get_d
             "SELECT g.id, g.name, g.color_hex FROM outfit_items oi JOIN garments g ON g.id = oi.garment_id "
             "WHERE oi.outfit_id = ?", (o["id"],)))
     return out
+
+
+def _outfit(db, oid: int):
+    o = db.execute("SELECT * FROM outfits WHERE id = ?", (oid,)).fetchone()
+    if not o:
+        raise HTTPException(404)
+    items = rows(db.execute(
+        "SELECT g.id, g.cutout, c.slot FROM outfit_items oi JOIN garments g ON g.id = oi.garment_id "
+        "JOIN categories c ON c.id = g.category_id WHERE oi.outfit_id = ?", (oid,)))
+    return dict(o), items
+
+
+@router.get("/outfits/{oid}/options")
+def options(oid: int, slot: str, db=Depends(get_db)):
+    """Cosa posso mettere al posto di questo pezzo, senza rompere le regole."""
+    o, items = _outfit(db, oid)
+    return engine.swap_options(db, o, items, slot)
+
+
+class Swap(BaseModel):
+    remove_ids: list[int] = []
+    add_ids: list[int] = []
+
+
+@router.post("/outfits/{oid}/swap")
+def swap(oid: int, body: Swap, db=Depends(get_db)):
+    """Cambio uno o più pezzi: l'outfit diventa la mia scelta per quel giorno."""
+    o, _ = _outfit(db, oid)
+    for gid in body.remove_ids:
+        db.execute("DELETE FROM outfit_items WHERE outfit_id = ? AND garment_id = ?", (oid, gid))
+    for gid in body.add_ids:
+        db.execute("INSERT INTO outfit_items(outfit_id, garment_id) VALUES (?,?) ON CONFLICT DO NOTHING", (oid, gid))
+    _, items = _outfit(db, oid)
+    db.execute("UPDATE outfits SET image = ?, source = CASE WHEN source = 'viaggio' THEN 'viaggio' ELSE 'manuale' END "
+               "WHERE id = ?", (composer.compose(items), oid))
+    choose(oid, db)
+    return {"ok": True}
+
+
+@router.post("/outfits/{oid}/choose")
+def choose(oid: int, db=Depends(get_db)):
+    """Scelgo questa proposta: le altre dello stesso giorno escono."""
+    o, _ = _outfit(db, oid)
+    db.execute("UPDATE outfits SET status = 'scartato' WHERE date = ? AND id != ? AND status = 'proposto'",
+               (o["date"], oid))
+    return {"ok": True}
+
+
+@router.post("/outfits/{oid}/unchoose")
+def unchoose(oid: int, db=Depends(get_db)):
+    """Ci ripenso: tornano le altre proposte del giorno."""
+    o, _ = _outfit(db, oid)
+    db.execute("UPDATE outfits SET status = 'proposto' WHERE date = ? AND status = 'scartato'", (o["date"],))
+    return {"ok": True}

@@ -1,19 +1,19 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const navigate = useNavigate();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     try {
       await api.post("/auth/login", { password });
-      navigate("/");
+      const me = await api.get<{ onboarded: boolean }>("/auth/me");
+      // Ricarico la pagina: così l'app rilegge subito che sei entrato.
+      window.location.assign(me.onboarded ? "/" : "/benvenuto");
     } catch {
       setError("Password sbagliata.");
     }

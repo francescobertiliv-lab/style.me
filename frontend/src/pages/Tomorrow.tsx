@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CloudSun, MapPin, Plane, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, CloudSun, MapPin, Plane, Plus, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
 import { Link } from "react-router-dom";
-import { api, type DayPlan } from "@/lib/api";
+import { api, OPTIONAL_SLOTS, SLOT_LABEL, type DayPlan } from "@/lib/api";
+import SwapSheet from "@/components/SwapSheet";
 import { cn, formatDay, media } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,13 +19,14 @@ export default function Tomorrow() {
   const [pick, setPick] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [sheet, setSheet] = useState<{ outfitId: number; slot: string } | null>(null);
 
-  const load = useCallback(async (refresh = false) => {
+  const load = useCallback(async (refresh = false, keepPick = false) => {
     setBusy(true);
     setError("");
     try {
       setPlan(await api.get<DayPlan>(`/day/tomorrow${refresh ? "?refresh=1" : ""}`));
-      setPick(0);
+      if (!keepPick) setPick(0);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -47,13 +49,27 @@ export default function Tomorrow() {
 
   async function rate(outfitId: number, rating: 1 | -1) {
     await api.post(`/outfits/${outfitId}/rate`, { rating });
+    load(false, true);
+  }
+
+  async function choose(outfitId: number) {
+    await api.post(`/outfits/${outfitId}/choose`);
+    load();
+  }
+
+  async function unchoose(outfitId: number) {
+    await api.post(`/outfits/${outfitId}/unchoose`);
     load();
   }
 
   if (error) return <p className="py-10 text-center text-destructive">{error}</p>;
   if (!plan) return <p className="py-10 text-center text-muted-foreground">Preparo domani…</p>;
 
-  const outfit = plan.outfits[pick];
+  const outfit = plan.outfits[Math.min(pick, plan.outfits.length - 1)];
+  const present = new Set(outfit?.items.map((i) => i.slot));
+  const addable = (OPTIONAL_SLOTS[plan.dress_code] ?? []).filter((s) => !present.has(s));
+  // Nel completo giacca e pantaloni si cambiano insieme: un solo tocco basta.
+  const pairSlot = (slot: string) => (plan.dress_code === "completo" && slot === "sotto" ? "giacca" : slot);
 
   return (
     <div className="space-y-4">
@@ -84,6 +100,11 @@ export default function Tomorrow() {
         </Card>
       )}
 
+      {sheet && (
+        <SwapSheet outfitId={sheet.outfitId} slot={sheet.slot} onClose={() => setSheet(null)}
+          onDone={() => { setSheet(null); load(); }} />
+      )}
+
       {plan.missing.length > 0 && (
         <Card>
           <CardContent className="space-y-1 pt-4 text-sm">
@@ -91,6 +112,19 @@ export default function Tomorrow() {
             {plan.missing.map((m) => <p key={m} className="text-muted-foreground">{m}</p>)}
           </CardContent>
         </Card>
+      )}
+
+      {!plan.chosen && plan.outfits.length > 1 && (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">Ti propongo {plan.outfits.length} abbinamenti. Scegli quello che preferisci, e se vuoi cambia un pezzo.</p>
+          <div className="flex gap-2">
+            {plan.outfits.map((o, idx) => (
+              <Button key={o.id} variant={idx === pick ? "default" : "outline"} size="sm" onClick={() => setPick(idx)}>
+                {o.source === "manuale" ? "Tua" : `Proposta ${idx + 1}`}
+              </Button>
+            ))}
+          </div>
+        </div>
       )}
 
       {outfit && (
@@ -105,14 +139,35 @@ export default function Tomorrow() {
             </div>
           )}
           <CardContent className="space-y-3 pt-3">
-            <ul className="space-y-1 text-sm">
+            <ul className="divide-y divide-border text-sm">
               {outfit.items.map((i) => (
-                <li key={i.id} className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full border border-border" style={{ background: i.color_hex }} />
-                  <Link to={`/guardaroba/${i.id}`} className="hover:underline">{i.name}</Link>
+                <li key={i.id}>
+                  <button className="flex w-full items-center gap-2 py-2 text-left" onClick={() => setSheet({ outfitId: outfit.id, slot: pairSlot(i.slot) })}>
+                    <span className="h-3 w-3 shrink-0 rounded-full border border-border" style={{ background: i.color_hex }} />
+                    <span className="flex-1">{i.name}</span>
+                    <span className="text-xs text-muted-foreground">cambia</span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </button>
                 </li>
               ))}
             </ul>
+            {addable.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {addable.map((slot) => (
+                  <Button key={slot} size="sm" variant="ghost" onClick={() => setSheet({ outfitId: outfit.id, slot })}>
+                    <Plus className="h-4 w-4" /> {SLOT_LABEL[slot].toLowerCase()}
+                  </Button>
+                ))}
+              </div>
+            )}
+            {plan.chosen || plan.outfits.length === 1 ? (
+              <p className="flex items-center gap-2 text-sm">
+                <Check className="h-4 w-4 text-primary" /> Domani metti questo.
+                {plan.chosen && <button className="ml-auto text-xs text-muted-foreground underline" onClick={() => unchoose(outfit.id)}>Rivedi le proposte</button>}
+              </p>
+            ) : (
+              <Button className="w-full" onClick={() => choose(outfit.id)}>Scelgo questo</Button>
+            )}
             <div className="flex items-center gap-2">
               <Button variant={outfit.rating === 1 ? "default" : "outline"} size="icon" aria-label="Mi piace"
                 onClick={() => rate(outfit.id, 1)}><ThumbsUp className="h-4 w-4" /></Button>
@@ -126,16 +181,6 @@ export default function Tomorrow() {
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {plan.outfits.length > 1 && (
-        <div className="flex gap-2">
-          {plan.outfits.map((o, idx) => (
-            <Button key={o.id} variant={idx === pick ? "default" : "outline"} size="sm" onClick={() => setPick(idx)}>
-              {idx === 0 ? "Proposta" : `Alternativa ${idx}`}
-            </Button>
-          ))}
-        </div>
       )}
 
       <section className="space-y-2">

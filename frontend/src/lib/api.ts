@@ -42,8 +42,18 @@ export type DayPlan = {
   date: string; week_label: string; dress_code: "completo" | "informale" | "libero";
   reason: string; overridden: boolean; city: string; weather_text: string; weather_ok: boolean;
   calendar_ok: boolean; trip: { id: number; destination: string } | null;
-  outfits: { id: number; image: string | null; items: Item[]; rating: number | null; status: string }[];
-  missing: string[];
+  outfits: { id: number; image: string | null; items: Item[]; rating: number | null; status: string; source: string }[];
+  missing: string[]; chosen: boolean;
+};
+export type SwapOptions = { slot: string; current: Item[]; removable: boolean; options: Item[][] };
+
+export const SLOT_LABEL: Record<string, string> = {
+  capospalla: "Cappotto", giacca: "Giacca", strato: "Maglione", top: "Camicia o maglia", sotto: "Pantaloni",
+  scarpe: "Scarpe", cravatta: "Cravatta", accessorio: "Accessorio",
+};
+// Pezzi che si possono aggiungere o togliere senza rompere l'outfit.
+export const OPTIONAL_SLOTS: Record<string, string[]> = {
+  completo: ["strato", "capospalla"], informale: ["giacca", "strato", "capospalla"], libero: ["giacca", "strato", "capospalla"],
 };
 
 export type Garment = {

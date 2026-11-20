@@ -5,14 +5,23 @@ import json
 import httpx
 
 from .. import config
+from ..db import get_setting
 from . import storage
 
 
-def send_email(subject: str, text: str, html: str | None = None, image_path: str | None = None) -> bool:
+def mail_config(conn) -> dict:
+    """Chiave e indirizzi: dall'app (primo avvio) o, in mancanza, dalle variabili d'ambiente."""
+    return {"key": get_setting(conn, "resend_api_key") or config.RESEND_API_KEY,
+            "from": get_setting(conn, "email_from") or config.EMAIL_FROM,
+            "to": get_setting(conn, "mail_to") or config.MAIL_TO}
+
+
+def send_email(conn, subject: str, text: str, html: str | None = None, image_path: str | None = None) -> bool:
     """Mail con Resend. L'immagine dell'outfit va dentro la mail come allegato in linea."""
-    if not (config.RESEND_API_KEY and config.EMAIL_FROM and config.MAIL_TO):
+    m = mail_config(conn)
+    if not (m["key"] and m["from"] and m["to"]):
         return False
-    payload = {"from": config.EMAIL_FROM, "to": [config.MAIL_TO], "subject": subject, "text": text}
+    payload = {"from": m["from"], "to": [m["to"]], "subject": subject, "text": text}
     if html:
         payload["html"] = html.replace("{{image}}", "")
     data = storage.get(image_path) if image_path else None
@@ -22,12 +31,12 @@ def send_email(subject: str, text: str, html: str | None = None, image_path: str
         payload["attachments"] = [{"filename": "outfit.jpg", "content": base64.b64encode(data).decode(),
                                    "content_id": "outfit"}]
     r = httpx.post("https://api.resend.com/emails", json=payload,
-                   headers={"Authorization": f"Bearer {config.RESEND_API_KEY}"}, timeout=20)
+                   headers={"Authorization": f"Bearer {m['key']}"}, timeout=20)
     if r.status_code == 422 and "attachments" in payload:  # senza immagine piuttosto che niente
         payload.pop("attachments")
         payload["html"] = html.replace("{{image}}", "")
         r = httpx.post("https://api.resend.com/emails", json=payload,
-                       headers={"Authorization": f"Bearer {config.RESEND_API_KEY}"}, timeout=20)
+                       headers={"Authorization": f"Bearer {m['key']}"}, timeout=20)
     r.raise_for_status()
     return True
 
@@ -61,7 +70,9 @@ def notify(conn, kind: str, title: str, body: str, *, url: str = "/", html: str 
     """Manda la mail e il push. Non solleva mai: un avviso fallito non deve bloccare l'app."""
     result = {"email": False, "push": 0}
     try:
-        result["email"] = send_email(title, body + f"\n\n{config.APP_URL}{url}", html, image)
+        result["email"] = send_email(conn, title, body + f"\n\n{config.APP_URL}{url}", html, image)
+    except httpx.HTTPStatusError as exc:
+        result["email_error"] = f"Resend {exc.response.status_code}: {exc.response.text[:200]}"
     except Exception as exc:
         result["email_error"] = type(exc).__name__
     try:

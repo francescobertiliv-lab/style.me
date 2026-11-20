@@ -33,6 +33,8 @@ def client(request, tmp_path, monkeypatch):
         "ok": True, "tmax": 14, "tmin": 6, "rain_mm": 0, "rain_prob": 20, "wind": 10, "code": 3, "summary": "nuvoloso"})
     c = TestClient(main.app)
     assert c.get("/api/day/tomorrow").status_code == 401
+    me = c.get("/api/auth/me").json()
+    assert me == {"logged_in": False, "needs_setup": False, "onboarded": False}
     assert c.post("/api/auth/login", json={"password": "no"}).status_code == 401
     assert c.post("/api/auth/login", json={"password": "segreta"}).status_code == 200
     return c
@@ -90,6 +92,27 @@ def test_full_flow(client):
     assert plan2["dress_code"] == "informale" and plan2["overridden"]
     assert not any(i["slot"] == "cravatta" for o in plan2["outfits"] for i in o["items"])
 
+    # cambio un pezzo: le alternative rispettano le regole e l'outfit diventa la mia scelta
+    o0 = plan2["outfits"][0]
+    top = next(i for i in o0["items"] if i["slot"] == "top")
+    opts = c.get(f"/api/outfits/{o0['id']}/options?slot=top").json()
+    assert opts["current"][0]["id"] == top["id"]
+    assert all(o[0]["id"] != top["id"] for o in opts["options"])
+    if opts["options"]:
+        new = opts["options"][0][0]["id"]
+        assert c.post(f"/api/outfits/{o0['id']}/swap", json={"remove_ids": [top["id"]], "add_ids": [new]}).status_code == 200
+        plan3 = c.get("/api/day/tomorrow").json()
+        assert len(plan3["outfits"]) == 1 and new in {i["id"] for i in plan3["outfits"][0]["items"]}
+        assert plan3["chosen"] and plan3["outfits"][0]["source"] == "manuale"
+        # ci ripenso: tornano le altre proposte
+        c.post(f"/api/outfits/{o0['id']}/unchoose")
+        plan4 = c.get("/api/day/tomorrow").json()
+        assert not plan4["chosen"] and len(plan4["outfits"]) == len(plan2["outfits"])
+        # Ricalcola butta anche la scelta a mano non indossata e rifà le proposte
+        plan5 = c.get("/api/day/tomorrow?refresh=1").json()
+        assert all(o["source"] == "motore" for o in plan5["outfits"]) and not plan5["chosen"]
+        plan2 = plan5
+
     oid = plan2["outfits"][0]["id"]
     assert c.post(f"/api/outfits/{oid}/worn").status_code == 200
     assert c.post(f"/api/outfits/{oid}/rate", json={"rating": 1}).status_code == 200
@@ -144,7 +167,7 @@ def test_full_flow(client):
     assert "outfits" in tr
 
     # cron: senza segreto no, con il segreto la sera manda (qui senza mail configurata: nessun errore)
-    assert c.get("/api/cron/tick").status_code == 401
+    assert c.get("/api/cron/tick").status_code == 401  # con CRON_SECRET impostato
     r = c.get("/api/cron/tick", headers={"Authorization": "Bearer cron"})
     assert r.status_code == 200 and "calendar" in r.json()
 
@@ -159,3 +182,23 @@ def test_evening_once(client, monkeypatch):
         assert "evening" in first and "evening" not in second
         log = conn.execute("SELECT body FROM notification_log WHERE kind = 'sera'").fetchone()
         assert "Outfit:" in log["body"]
+
+
+def test_first_run_setup(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATABASE_URL", f"sqlite:///{tmp_path / 'first.db'}")
+    monkeypatch.setattr(config, "PHOTOS_DIR", tmp_path / "photos")
+    monkeypatch.setattr(config, "PASSWORD_HASH", "")
+    monkeypatch.setattr(main, "_ready", False)
+    c = TestClient(main.app)
+    assert c.get("/api/auth/me").json()["needs_setup"] is True
+    assert c.post("/api/auth/setup", json={"password": "corta"}).status_code == 400
+    assert c.post("/api/auth/setup", json={"password": "lunga-abbastanza"}).status_code == 200
+    assert c.post("/api/auth/setup", json={"password": "un-altra-ancora"}).status_code == 409
+    assert c.get("/api/settings").status_code == 200  # già dentro dopo il setup
+    c.put("/api/settings", json={"mail_to": "me@example.com", "onboarded": True})
+    c.put("/api/settings/resend-key", json={"key": "re_x"})
+    assert "re_x" not in c.get("/api/settings").text
+    st = c.get("/api/status").json()
+    assert st["mail_to"] == "me@example.com" and st["mail"] is False  # manca il mittente
+    c2 = TestClient(main.app)
+    assert c2.post("/api/auth/login", json={"password": "lunga-abbastanza"}).status_code == 200
