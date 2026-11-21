@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api", dependencies=[Depends(require_user)])
 cron = APIRouter(prefix="/api/cron")
 
 EDITABLE = ("notify_time", "trip_alert_days", "the361_url", "home_city_id", "timezone", "rain", "climate", "plenary_trip",
-            "mail_to", "email_from", "onboarded")
+            "mail_to", "email_from", "onboarded", "onboarding_step")
 
 
 @router.get("/settings")

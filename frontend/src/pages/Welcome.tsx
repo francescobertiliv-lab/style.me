@@ -17,27 +17,37 @@ export default function Welcome() {
   const navigate = useNavigate();
   const [me, setMe] = useState<Me | null>(null);
 
+  const [saved, setSaved] = useState<Step | null>(null);
   useEffect(() => {
-    api.get<Me>("/auth/me").then((m) => {
-      if (!m.needs_setup && !m.logged_in) navigate("/login", { replace: true });
-      else setMe(m);
+    api.get<Me>("/auth/me").then(async (m) => {
+      if (!m.needs_setup && !m.logged_in) return navigate("/login", { replace: true });
+      // Riparto dal passo dove ero arrivato, anche se apro l'app da un altro dispositivo.
+      if (m.logged_in) {
+        const s = await api.get<{ onboarding_step: Step | null }>("/settings").catch(() => null);
+        setSaved(s?.onboarding_step ?? null);
+      }
+      setMe(m);
     });
   }, [navigate]);
 
   if (!me) return null;
   const steps: Step[] = [...(me.needs_setup ? ["password" as const] : []), "casa", "mail", "iphone", "misure", "capi"];
-  const asked = params.get("passo") as Step | null;
+  const asked = (params.get("passo") as Step | null) ?? saved;
   const step: Step = me.needs_setup ? "password" : asked && steps.includes(asked) ? asked : steps[0];
   const idx = steps.indexOf(step);
 
   function next() {
     if (step === "password") {
       setMe({ ...me!, needs_setup: false, logged_in: true });
+      api.put("/settings", { onboarding_step: "casa" }).catch(() => undefined);
       setParams({ passo: "casa" });
       return;
     }
     const n = steps[idx + 1];
-    if (n) setParams({ passo: n });
+    if (n) {
+      api.put("/settings", { onboarding_step: n }).catch(() => undefined);
+      setParams({ passo: n });
+    }
   }
 
   async function finish() {
