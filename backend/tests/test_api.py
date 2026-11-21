@@ -202,3 +202,25 @@ def test_first_run_setup(tmp_path, monkeypatch):
     assert st["mail_to"] == "me@example.com" and st["mail"] is False  # manca il mittente
     c2 = TestClient(main.app)
     assert c2.post("/api/auth/login", json={"password": "lunga-abbastanza"}).status_code == 200
+
+
+def test_quick_import(client):
+    c = client
+    cats = {x["name"]: x["id"] for x in c.get("/api/categories").json()}
+    names = []
+    for _ in range(2):
+        r = c.post("/api/garments/quick", data={"category_id": str(cats["camicia"])},
+                   files={"photo": ("p.jpg", photo((175, 200, 230)), "image/jpeg")})
+        assert r.status_code == 200, r.text
+        names.append(r.json()["name"])
+    assert names[0].startswith("Camicia ") and names[1] == names[0] + " 2"
+    todo = c.get("/api/garments?to_review=1").json()
+    assert len(todo) == 2 and all(g["category"] == "camicia" and g["formality"] == 4 for g in todo)
+    # entra subito nel guardaroba
+    assert len(c.get("/api/garments").json()) == 2
+    c.post(f"/api/garments/{todo[0]['id']}/reviewed")
+    g = c.get(f"/api/garments/{todo[1]['id']}").json()
+    body = {k: g[k] for k in ("category_id", "color_hex", "color_family", "pattern", "formality", "weight",
+                              "city_id", "photo", "cutout")}
+    assert c.put(f"/api/garments/{g['id']}", json={**body, "name": "Camicia oxford azzurra"}).status_code == 200
+    assert c.get("/api/garments?to_review=1").json() == []

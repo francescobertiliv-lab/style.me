@@ -61,7 +61,7 @@ export type Garment = {
   color_family: string; pattern: string; formality: number; weight: number; material: string | null;
   rain_ok: number; rain_gear: number; set_key: string | null; size: string | null; brand: string | null;
   price_eur: number | null; bought_on: string | null; status: string; city_id: number; photo: string;
-  cutout: string | null; notes: string | null; last_worn: string | null; colors?: { hex: string; share: number }[];
+  cutout: string | null; notes: string | null; last_worn: string | null; to_review?: number; colors?: { hex: string; share: number }[];
 };
 export type Category = { id: number; name: string; slot: string; repeat_days: number | null;
   default_formality: number; default_weight: number };
