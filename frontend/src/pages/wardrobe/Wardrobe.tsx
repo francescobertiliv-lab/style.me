@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { History, Plus, Scissors } from "lucide-react";
+import { History, Images, Plus, Scissors } from "lucide-react";
 import { STATUS_LABEL, type City, type Garment } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { media } from "@/lib/utils";
@@ -18,6 +18,7 @@ export default function Wardrobe() {
   const [city, setCity] = useState("");
   const { data } = useApi<Garment[]>("/garments");
   const { data: cities } = useApi<City[]>("/cities");
+  const todo = (data ?? []).filter((g) => g.to_review).length;
 
   const list = useMemo(() => (data ?? []).filter((g) =>
     (!slot || g.slot === slot) && (!status || g.status === status) && (!city || String(g.city_id) === city)), [data, slot, status, city]);
@@ -28,9 +29,15 @@ export default function Wardrobe() {
         <div className="flex gap-1">
           <Link to="/storico"><Button variant="ghost" size="icon" aria-label="Storico"><History className="h-5 w-5" /></Button></Link>
           <Link to="/sarta"><Button variant="ghost" size="icon" aria-label="Sarta"><Scissors className="h-5 w-5" /></Button></Link>
+          <Link to="/guardaroba/importa"><Button variant="outline" size="sm"><Images className="h-4 w-4" />In serie</Button></Link>
           <Link to="/guardaroba/nuovo"><Button size="sm"><Plus className="h-4 w-4" />Capo</Button></Link>
         </div>
       } />
+      {todo > 0 && (
+        <Link to="/guardaroba/da-sistemare" className="mb-3 block rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {todo === 1 ? "1 capo importato da controllare" : `${todo} capi importati da controllare`} →
+        </Link>
+      )}
       <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
         {Object.entries(SLOTS).map(([k, v]) => (
           <button key={k} onClick={() => setSlot(k)}

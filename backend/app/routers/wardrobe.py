@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from .. import config
 from ..auth import require_user
-from ..db import get_db, row, rows
+from ..db import get_db, get_setting, row, rows
 from ..services import images, storage
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_user)])
@@ -92,8 +92,10 @@ GARMENT_SQL = """
 
 @router.get("/garments")
 def list_garments(status: str | None = None, city_id: int | None = None, slot: str | None = None,
-                  archived: int = 0, db=Depends(get_db)):
+                  archived: int = 0, to_review: int | None = None, db=Depends(get_db)):
     q, p = GARMENT_SQL + " WHERE g.archived = ?", [archived]
+    if to_review is not None:
+        q, p = q + " AND g.to_review = ?", p + [to_review]
     if status:
         q, p = q + " AND g.status = ?", p + [status]
     if city_id:
@@ -109,6 +111,29 @@ async def upload_photo(photo: UploadFile = File(...), cutout: UploadFile | None 
     saved = images.save_upload(await photo.read(), await cutout.read() if cutout else None)
     proposal = images.propose_attributes(db, saved["image"])
     return {"photo": saved["photo"], "cutout": saved["cutout"], "proposal": proposal}
+
+
+@router.post("/garments/quick")
+async def quick_add(photo: UploadFile = File(...), cutout: UploadFile | None = File(None),
+                    category_id: int = Form(...), city_id: int | None = Form(None), db=Depends(get_db)):
+    """Importazione in serie: una foto, la categoria scelta prima, il resto lo propongo io.
+    Il capo entra subito nel guardaroba e finisce nella coda "Da sistemare"."""
+    cat = row(db.execute("SELECT * FROM categories WHERE id = ?", (category_id,)))
+    if not cat:
+        raise HTTPException(400, "Categoria sconosciuta")
+    saved = images.save_upload(await photo.read(), await cutout.read() if cutout else None)
+    p = images.propose_attributes(db, saved["image"])
+    base = f"{cat['name'].capitalize()} {p['color_family']}"
+    same = db.execute("SELECT COUNT(*) AS n FROM garments WHERE name = ? OR name LIKE ?",
+                      (base, base + " %")).fetchone()["n"]
+    name = f"{base} {same + 1}" if same else base
+    city = city_id or get_setting(db, "home_city_id", 1)
+    gid = db.insert(
+        f"INSERT INTO garments({COLS}, to_review) VALUES ({','.join('?' * 22)})",
+        (name, category_id, None, p["color_hex"], p["color_family"], json.dumps(p["colors"]), p["pattern"],
+         cat["default_formality"], cat["default_weight"], None, 1, 0, None, None, None, None,
+         "pulito", city, saved["photo"], saved["cutout"], None, 1))
+    return {"id": gid, "name": name, "cutout": saved["cutout"]}
 
 
 class GarmentIn(BaseModel):
@@ -172,7 +197,14 @@ def get_garment(gid: int, db=Depends(get_db)):
 @router.put("/garments/{gid}")
 def update_garment(gid: int, body: GarmentIn, db=Depends(get_db)):
     sets = ", ".join(f"{c.strip()} = ?" for c in COLS.split(","))
-    db.execute(f"UPDATE garments SET {sets} WHERE id = ?", (*_garment_values(body), gid))
+    db.execute(f"UPDATE garments SET {sets}, to_review = 0 WHERE id = ?", (*_garment_values(body), gid))
+    return {"ok": True}
+
+
+@router.post("/garments/{gid}/reviewed")
+def reviewed(gid: int, db=Depends(get_db)):
+    """Controllato: va bene com'è."""
+    db.execute("UPDATE garments SET to_review = 0 WHERE id = ?", (gid,))
     return {"ok": True}
 
 

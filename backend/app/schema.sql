@@ -69,6 +69,7 @@ CREATE TABLE garments (
   model_status TEXT CHECK (model_status IN ('in_coda','pronto','fallito')),
   notes        TEXT,
   archived     INTEGER NOT NULL DEFAULT 0,
+  to_review    INTEGER NOT NULL DEFAULT 0, -- 1 = caricato in serie, da controllare
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX garments_available ON garments(status, city_id) WHERE archived = 0;

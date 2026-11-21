@@ -9,6 +9,8 @@ import Welcome from "@/pages/Welcome";
 import Settings from "@/pages/Settings";
 import Wardrobe from "@/pages/wardrobe/Wardrobe";
 import NewGarment from "@/pages/wardrobe/NewGarment";
+import Import from "@/pages/wardrobe/Import";
+import Review from "@/pages/wardrobe/Review";
 import GarmentDetail from "@/pages/wardrobe/GarmentDetail";
 import History from "@/pages/wardrobe/History";
 import Tailor from "@/pages/wardrobe/Tailor";
@@ -44,7 +46,7 @@ export default function App() {
   if (pathname === "/benvenuto") return <Welcome />;
   if (!me) return null;
   const goto = me.needs_setup ? "/benvenuto" : !me.logged_in ? "/login"
-    : !me.onboarded && !pathname.startsWith("/guardaroba/nuovo") ? "/benvenuto" : null;
+    : !me.onboarded && !pathname.startsWith("/guardaroba/nuovo") && !pathname.startsWith("/guardaroba/importa") && !pathname.startsWith("/guardaroba/da-sistemare") ? "/benvenuto" : null;
   // Si reindirizza solo con una risposta fresca, letta per questa pagina.
   if (goto && goto !== pathname) return me.path === pathname ? <Navigate to={goto} replace /> : null;
   if (pathname === "/login") return <Login />;
@@ -61,6 +63,8 @@ export default function App() {
           <Route path="/" element={<Tomorrow />} />
           <Route path="/guardaroba" element={<Wardrobe />} />
           <Route path="/guardaroba/nuovo" element={<NewGarment />} />
+          <Route path="/guardaroba/importa" element={<Import />} />
+          <Route path="/guardaroba/da-sistemare" element={<Review />} />
           <Route path="/guardaroba/:id" element={<GarmentDetail />} />
           <Route path="/storico" element={<History />} />
           <Route path="/sarta" element={<Tailor />} />

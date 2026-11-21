@@ -382,6 +382,10 @@ function GarmentsStep({ onDone }: { onDone: () => void }) {
           </li>
         ))}
       </ul>
+      <button onClick={() => navigate("/guardaroba/importa")} className="mb-3 w-full rounded-lg border border-dashed border-border p-3 text-left text-sm">
+        <span className="font-medium">Hai già le foto nel Rullino?</span>
+        <span className="block text-xs text-muted-foreground">Importale in serie, una categoria alla volta. Poi torna qui.</span>
+      </button>
       <Button className="w-full" onClick={onDone}>{total === NEEDS.length ? "Inizia" : "Inizia, il resto dopo"}</Button>
     </div>
   );

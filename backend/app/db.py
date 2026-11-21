@@ -124,8 +124,25 @@ def init_db(url: str | Path | None = None) -> None:
                 conn.executescript(schema)
                 conn.executescript(seed)
             conn.commit()
+        _migrate(conn)
+        conn.commit()
     finally:
         conn.close()
+
+
+# Colonne aggiunte dopo la prima versione: (tabella, colonna, definizione).
+MIGRATIONS = [("garments", "to_review", "INTEGER NOT NULL DEFAULT 0")]
+
+
+def _migrate(conn) -> None:
+    """Aggiunge le colonne nuove ai database già creati, senza toccare i dati."""
+    for table, col, ddl in MIGRATIONS:
+        if conn.pg:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {ddl}")
+        else:
+            cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            if col not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
 
 
 @contextmanager
